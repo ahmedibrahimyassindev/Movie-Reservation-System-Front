@@ -68,10 +68,31 @@ export default function AdminDashboardPage() {
 
   const saveMovieMutation = useMutation({
     mutationFn: (data: typeof movieForm) => {
-      if (editingMovie) {
-        return moviesApi.update(editingMovie.id, data);
+      const payload: any = {
+        title: data.title.trim(),
+        genre: data.genre.trim(),
+        durationMinutes: Number(data.durationMinutes),
+      };
+
+      if (data.description && data.description.trim()) {
+        payload.description = data.description.trim();
       }
-      return moviesApi.create(data);
+
+      if (data.posterUrl && data.posterUrl.trim()) {
+        payload.posterUrl = data.posterUrl.trim();
+      }
+
+      if (data.releaseDate && data.releaseDate.trim()) {
+        const d = new Date(data.releaseDate);
+        if (!isNaN(d.getTime())) {
+          payload.releaseDate = d.toISOString();
+        }
+      }
+
+      if (editingMovie) {
+        return moviesApi.update(editingMovie.id, payload);
+      }
+      return moviesApi.create(payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-movies'] });
@@ -88,7 +109,14 @@ export default function AdminDashboardPage() {
       });
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || 'Failed to save movie.');
+      const errors = err.response?.data?.errors;
+      const detail = Array.isArray(errors)
+        ? errors.map((e: any) => `${e.path?.replace('body.', '') || ''}: ${e.message}`).join('; ')
+        : '';
+      alert(
+        (err.response?.data?.message || 'Failed to save movie.') +
+          (detail ? `\nDetails: ${detail}` : '')
+      );
     },
   });
 
@@ -185,13 +213,18 @@ export default function AdminDashboardPage() {
   });
 
   const createShowtimeMutation = useMutation({
-    mutationFn: (data: typeof showtimeForm) =>
-      showtimesApi.create({
+    mutationFn: (data: typeof showtimeForm) => {
+      const d = new Date(data.startsAt);
+      if (isNaN(d.getTime())) {
+        throw new Error('Please enter a valid screening start date and time.');
+      }
+      return showtimesApi.create({
         movieId: data.movieId,
         hallId: data.hallId,
-        startsAt: new Date(data.startsAt).toISOString(),
+        startsAt: d.toISOString(),
         ticketPrice: Number(data.ticketPrice),
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-showtimes'] });
       queryClient.invalidateQueries({ queryKey: ['showtimes'] });
@@ -205,7 +238,14 @@ export default function AdminDashboardPage() {
       alert('Showtime created successfully!');
     },
     onError: (err: any) => {
-      alert(err.response?.data?.message || 'Failed to create showtime (Check for scheduling conflicts).');
+      const errors = err.response?.data?.errors;
+      const detail = Array.isArray(errors)
+        ? errors.map((e: any) => `${e.path?.replace('body.', '') || ''}: ${e.message}`).join('; ')
+        : '';
+      alert(
+        (err.response?.data?.message || err.message || 'Failed to create showtime.') +
+          (detail ? `\nDetails: ${detail}` : '')
+      );
     },
   });
 
